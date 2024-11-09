@@ -1,6 +1,6 @@
 import { prisma } from "../../../../lib/prisma";
 import { NextResponse } from "next/server";
-import { auth } from "../../../../auth";
+import { auth } from "../../../../lib/auth";
 
 import { Role } from "@prisma/client";
 
