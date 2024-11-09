@@ -1,15 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../../lib/prisma";
 import { resend } from "../../../../../../lib/resend";
-import ProjectInviteEmail from "../../../../../emails/ProjectInviteEmail";
-import { auth } from "../../../../../auth";
 
 import { nanoid } from "nanoid";
+import { auth } from "../../../../../../auth";
+import ProjectInviteEmail from "@/app/emails/ProjectInviteEmail";
+
+
+// Add this type at the top of the file
+type ProjectPermission = {
+  field: string;
+  access: 'read' | 'write';
+};
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId");
   const { email, role, permissions } = await request.json();
+  // permissions should be an array like: 
+  // ["video.title:write", "video.description:read", "project.requirements:read"]
 
   const session = await auth();
   if (!session) {
@@ -33,6 +42,13 @@ export async function POST(request: Request) {
   if (!projectId) {
     return NextResponse.json(
       { success: false, message: "Project Id is missing" },
+      { status: 400 }
+    );
+  }
+
+  if (role === 'editor' && (!permissions || !Array.isArray(permissions))) {
+    return NextResponse.json(
+      { success: false, message: "Editor permissions are required" },
       { status: 400 }
     );
   }
@@ -108,9 +124,7 @@ export async function POST(request: Request) {
             status: "pending",
             inviteCode: invitecode,
             inviteCodeExpiry: invitecodeExpiry,
-            permissions: permissions
-              .split(",")
-              .map((permission: string) => permission),
+            permissions: role === 'editor' ? permissions : ['all'],
           },
         });
         return NextResponse.json(

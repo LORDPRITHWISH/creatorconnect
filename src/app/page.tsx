@@ -1,5 +1,6 @@
 import { DatePicker } from "antd";
 import { signIn } from "../../auth";
+import { Button } from "@/components/ui/button";
 
 export default function Web() {
   return (
@@ -12,7 +13,7 @@ export default function Web() {
           await signIn("google");
         }}
       >
-        <button type="submit">Signin with Google</button>
+        <Button>Signin with Google</Button>
       </form>
     </>
   );

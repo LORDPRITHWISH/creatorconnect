@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../../../lib/prisma";
 import { MemberStatus } from "@prisma/client";
-import { auth } from "../../../../../auth";
+import { prisma } from "../../../../../../lib/prisma";
+import { auth } from "../../../../../../auth";
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
