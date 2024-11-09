@@ -1,8 +1,8 @@
-import { prisma } from "../../../../lib/prisma";
 import { NextResponse } from "next/server";
-import { auth } from "../../../../lib/auth";
 
 import { Role } from "@prisma/client";
+import { prisma } from "../../../../../lib/prisma";
+import { auth } from "../../../../../auth";
 
 export async function PUT(request: Request) {
   const { searchParams } = new URL(request.url);

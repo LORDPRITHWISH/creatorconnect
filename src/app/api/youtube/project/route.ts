@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../../lib/prisma";
-import { auth } from "../../../../auth";
-import { s3Client } from "../../../../lib/s3";
+
 
 import {
   CreateMultipartUploadCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { auth } from "../../../../../auth";
+import { s3Client } from "../../../../../lib/s3";
+import { prisma } from "../../../../../lib/prisma";
 
 export async function POST(request: Request) {
   if (request.method !== "POST") {
@@ -45,30 +46,20 @@ export async function POST(request: Request) {
   }
   const user = session.user;
   try {
-    const projectExists = await prisma.project.findUnique({
-      where: {
-        name: projectName,
-        ownerId: user.id,
-      },
-    });
-    if (projectExists) {
-      return NextResponse.json(
-        { success: false, message: "Project already exists" },
-        { status: 400 }
-      );
-    }
     let storageKey: string | undefined;
     let presignedUrls: string[] = [];
-    let UploadId: string | undefined;
+    let uploadId: string | undefined;
 
-    if (filePartCount) {
-      const storageKey = `${session.user.id}/${projectName}-${Date.now()}`;
+    if (filePartCount && filePartCount > 0) {
+      storageKey = `${session.user.id}/projects/${projectName}-${Date.now()}`;
       const createMultiUpload = new CreateMultipartUploadCommand({
         Bucket: process.env.S3_BUCKET_NAME,
         Key: storageKey,
+        ContentType: 'video/mp4',
       });
+
       const uploadResponse = await s3Client.send(createMultiUpload);
-      UploadId = uploadResponse.UploadId;
+      uploadId = uploadResponse.UploadId;
 
       presignedUrls = await Promise.all(
         Array.from({ length: filePartCount }, async (_, index) => {
@@ -76,42 +67,58 @@ export async function POST(request: Request) {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: storageKey,
             PartNumber: index + 1,
-            UploadId,
+            UploadId: uploadId,
           });
           return getSignedUrl(s3Client, uploadPartCommand, { expiresIn: 3600 });
         })
       );
-      return { presignedUrls, storageKey, UploadId };
+
+      return NextResponse.json({
+        success: true,
+        uploadData: {
+          presignedUrls,
+          storageKey,
+          uploadId,
+        }
+      });
     }
+
     const project = await prisma.project.create({
       data: {
         name: projectName,
         description: description ?? null,
-        ownerId: user.id as string,
+        ownerId: user.id!,
         key: storageKey ?? null,
         requirements: requirements ?? null,
         deadline: deadline ?? null,
+        Video: filePartCount ? {
+          create: {
+            title: projectName,
+            uploadStatus: 'pending',
+            publishAt: new Date(),
+            url: `https://${process.env.S3_BUCKET_NAME}.s3.amazonaws.com/${storageKey}`,
+          }
+        } : undefined,
       },
-    });
+      include: {
+        Video: true,
+      }
+    });        
+
     await prisma.member.create({
       data: {
         userId: session.user.id,
         projectId: project.id,
         role: "youtuber",
         status: "accepted",
-        email: user.email,
+        email: user.email!,
         permissions: ["all"],
       },
     });
+
     return NextResponse.json({
       success: true,
-      project: filePartCount
-        ? {
-            project,
-            uploadId: UploadId,
-            presignedUrls: presignedUrls,
-          }
-        : { project },
+      project,
       message: "Project created successfully",
     });
   } catch (error) {
@@ -270,28 +277,35 @@ export async function GET(request: Request) {
           select: {
             userId: true,
             role: true,
+            status: true,
+            email: true,
+            permissions: true,
           },
         },
-        // Video: {
-        //   select: {
-        //     id: true,
-        //     title: true,
-        //     description: true,
-        //     url: true,
-        //     publishedAt: true,
-        //     thumbnailUrl: true,
-        //     status: true,
-        //     VideoTag: {
-        //       select: {
-        //         tag: {
-        //           select: {
-        //             name: true,
-        //           },
-        //         },
-        //       },
-        //     },
-        //   },
-        // },
+        Video: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            url: true,
+            publishAt: true,
+            thumbnail: true,
+            uploadStatus: true,
+            keywords: true,
+            tags: true,
+            category: true,
+            privacyStatus: true,
+            isApproved: true,
+          },
+        },
+        Owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
       },
     });
     if (!project) {
